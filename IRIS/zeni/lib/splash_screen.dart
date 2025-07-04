@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -144,7 +143,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
               ),
               child: Stack(
                 children: [
-                  // AI Grid Pattern Background
+                  // AI Neural Lines Background
                   CustomPaint(
                     painter: AIGridPainter(_pulseAnimation.value),
                     size: Size(MediaQuery.of(context).size.width, MediaQuery.of(context).size.height),
@@ -317,50 +316,90 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   }
 }
 
-// Custom painter for AI grid background
+// Custom painter for AI neural lines background
 class AIGridPainter extends CustomPainter {
   final double animationValue;
-
   AIGridPainter(this.animationValue);
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.cyanAccent.withOpacity(0.1)
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
 
-    final spacing = 40.0;
-    final rows = (size.height / spacing).ceil();
-    final cols = (size.width / spacing).ceil();
-
-    // Draw grid lines
-    for (int i = 0; i <= rows; i++) {
-      final y = i * spacing;
-      final opacity = 0.1 + (sin(animationValue * 2 * pi + i * 0.1) * 0.05);
-      paint.color = Colors.cyanAccent.withOpacity(opacity);
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-
-    for (int i = 0; i <= cols; i++) {
-      final x = i * spacing;
-      final opacity = 0.1 + (sin(animationValue * 2 * pi + i * 0.1) * 0.05);
-      paint.color = Colors.cyanAccent.withOpacity(opacity);
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-
-    // Draw some random glowing dots
-    final dotPaint = Paint()
-      ..color = Colors.cyanAccent.withOpacity(0.4)
+    final nodePaint = Paint()
       ..style = PaintingStyle.fill;
 
-    for (int i = 0; i < 20; i++) {
-      final random = Random(i);
+    // Generate neural network nodes
+    final nodes = <Offset>[];
+    final random = Random(42); // Fixed seed for consistent positions
+    
+    // Create nodes across the screen
+    for (int i = 0; i < 25; i++) {
       final x = random.nextDouble() * size.width;
       final y = random.nextDouble() * size.height;
-      final pulseOffset = sin(animationValue * 2 * pi + i) * 0.3;
-      dotPaint.color = Colors.cyanAccent.withOpacity(0.2 + pulseOffset);
-      canvas.drawCircle(Offset(x, y), 2, dotPaint);
+      
+      // Add some movement to nodes
+      final moveX = sin(animationValue * 2 * pi + i * 0.5) * 20;
+      final moveY = cos(animationValue * 2 * pi + i * 0.3) * 15;
+      
+      nodes.add(Offset(x + moveX, y + moveY));
+    }
+
+    // Draw connections between nearby nodes
+    for (int i = 0; i < nodes.length; i++) {
+      for (int j = i + 1; j < nodes.length; j++) {
+        final distance = (nodes[i] - nodes[j]).distance;
+        
+        if (distance < 150) { // Only connect nearby nodes
+          final opacity = (1 - distance / 150) * 0.3;
+          final pulseEffect = sin(animationValue * 4 * pi + i + j) * 0.1;
+          
+          paint.color = Colors.cyanAccent.withOpacity(opacity + pulseEffect);
+          canvas.drawLine(nodes[i], nodes[j], paint);
+        }
+      }
+    }
+
+    // Draw neural nodes
+    for (int i = 0; i < nodes.length; i++) {
+      final pulseSize = 2 + sin(animationValue * 3 * pi + i * 0.7) * 1;
+      final opacity = 0.4 + sin(animationValue * 2 * pi + i * 0.4) * 0.3;
+      
+      nodePaint.color = Colors.cyanAccent.withOpacity(opacity);
+      canvas.drawCircle(nodes[i], pulseSize, nodePaint);
+      
+      // Add glow effect for some nodes
+      if (i % 3 == 0) {
+        nodePaint.color = Colors.cyanAccent.withOpacity(opacity * 0.3);
+        canvas.drawCircle(nodes[i], pulseSize * 2, nodePaint);
+      }
+    }
+
+    // Add some random data flow lines
+    for (int i = 0; i < 8; i++) {
+      final startNode = nodes[i % nodes.length];
+      final endNode = nodes[(i + 3) % nodes.length];
+      
+      final flowProgress = (animationValue + i * 0.2) % 1.0;
+      final flowPoint = Offset.lerp(startNode, endNode, flowProgress)!;
+      
+      // Draw flowing data point
+      final flowPaint = Paint()
+        ..color = Colors.white.withOpacity(0.8)
+        ..style = PaintingStyle.fill;
+      
+      canvas.drawCircle(flowPoint, 1.5, flowPaint);
+      
+      // Add trail effect
+      for (int t = 1; t <= 3; t++) {
+        final trailProgress = (flowProgress - t * 0.05).clamp(0.0, 1.0);
+        final trailPoint = Offset.lerp(startNode, endNode, trailProgress)!;
+        final trailOpacity = (0.4 - t * 0.1).clamp(0.0, 1.0);
+        
+        flowPaint.color = Colors.cyanAccent.withOpacity(trailOpacity);
+        canvas.drawCircle(trailPoint, 1.0, flowPaint);
+      }
     }
   }
 
