@@ -1,4 +1,5 @@
-# # Added turn off feature and updated wake phrases for iris
+# # # # Added turn off feature and updated wake phrases for iris and how are u also
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
@@ -195,7 +196,7 @@ def voice():
             'assistant_active': False
         })
     
-    # Regular commands (only work when assistant is active)
+    # Check for time command
     if 'time' in message:
         # Fetch current system time and format it
         current_time = datetime.now().strftime('%I:%M %p')
@@ -203,7 +204,9 @@ def voice():
             'response': f'The current time is {current_time}',
             'assistant_active': True
         })
-    elif 'weather' in message:
+    
+    # Check for weather command
+    if 'weather' in message:
         try:
             # Get client's location
             location = get_client_location()
@@ -233,38 +236,46 @@ def voice():
                     'response': f'Sorry, I couldn\'t fetch weather data for {location}. Please try again later.',
                     'assistant_active': True
                 })
-        
         except Exception as e:
             print(f'Weather handling error: {e}')
             return jsonify({
-                'response': 'Sorry, there was an error fetching the weather information.',
+                'response': "Sorry, I didn't catch that. You can ask me about the time, weather, say hello, or tell me to turn off!",
                 'assistant_active': True
             })
-    elif 'hello' in message:
+    
+    # Check for hello command
+    if 'hello' in message:
         return jsonify({
             'response': 'Hello! How can I help you today?',
             'assistant_active': True
         })
-    elif any(thanks in message for thanks in ['thank you', 'thanks', 'thank u']):
-        return jsonify({
-            'response': "You're welcome! I'm here if you need more help.",
-            'assistant_active': True
-        })
-    elif 'how are you' in message:
+    
+    # Check for how are you command
+    if 'how are you' in message:
         return jsonify({
             'response': "I'm doing well, thank you for asking! How can I assist you today?",
             'assistant_active': True
         })
-    elif any(help_word in message for help_word in ['what can you do', 'help', 'commands']):
+    
+    # Check for help command
+    if any(help_word in message for help_word in ['what can you do', 'help', 'commands']):
         return jsonify({
             'response': "I can help you with the current time, weather information for your location, and answer basic questions. Say 'turn off' to put me to sleep, or 'Hey iris' to wake me up!",
             'assistant_active': True
         })
-    else:
+    
+    # Check for thank you command
+    if 'thank you' in message:
         return jsonify({
-            'response': "Sorry, I didn't catch that. You can ask me about the time, weather, say hello, or tell me to turn off!",
+            'response': "You're welcome! I'm here to help anytime.",
             'assistant_active': True
         })
+    
+    # Fallback response for unrecognized commands
+    return jsonify({
+        'response': "Sorry, I didn't catch that. You can ask me about the time, weather, say hello, or tell me to turn off!",
+        'assistant_active': True
+    })
 
 @app.route('/set-location', methods=['POST'])
 def set_location():

@@ -1,15 +1,5 @@
- //added turn off feature
-
-
-
-
-
-
-
-
-
-// Added turn off feature
-
+//fixed the overlapping of voice
+// Added turn off feature and how are u
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:http/http.dart' as http;
@@ -54,6 +44,7 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
   String _transcribedText = '';
   String _assistantResponse = '';
   bool _isInitialized = false;
+  bool _isSpeaking = false; // Track if TTS is currently speaking
   
   Timer? _sleepModeTimer; // Timer for sleep mode polling
   Timer? _listeningTimer; // Timer to stop listening after specified duration
@@ -158,7 +149,20 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
   Future<void> _initTts() async {
     await _flutterTts.setLanguage('en-US');
     await _flutterTts.setSpeechRate(0.5);
+    
+    // Set up TTS callbacks
+    _flutterTts.setStartHandler(() {
+      setState(() {
+        _isSpeaking = true;
+      });
+    });
+    
     _flutterTts.setCompletionHandler(() {
+      setState(() {
+        _isSpeaking = false;
+      });
+      
+      // Only restart listening after TTS completes
       if (_isAssistantActive) {
         _startContinuousListening(); // Continuous when active
       } else {
@@ -169,7 +173,7 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
 
   // Continuous listening for active mode
   void _startContinuousListening() async {
-    if (!_isInitialized) return;
+    if (!_isInitialized || _isSpeaking) return; // Don't start if TTS is speaking
     
     // Cancel sleep mode timer if it's running
     _sleepModeTimer?.cancel();
@@ -203,13 +207,9 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
             await _flutterTts.speak(_assistantResponse);
             _scheduleSleepModeListening(); // Switch to interval listening
           } 
-          // Normal command processing when active
-          else if (_isAssistantActive && (text.contains('hello') || text.contains('time') || text.contains('weather') || text.contains('thank you'))) {
-            await _sendToBackend(_transcribedText);
-          } 
-          // Restart continuous listening if active
+          // Send all commands to backend when active
           else if (_isAssistantActive) {
-            _startContinuousListening();
+            await _sendToBackend(_transcribedText);
           }
         }
       },
@@ -246,7 +246,7 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
               _assistantResponse = 'Hi again! I was just resting. How can I help?';
             });
             await _flutterTts.speak(_assistantResponse);
-            _startContinuousListening(); // Switch to continuous listening
+            // Note: _startContinuousListening will be called by TTS completion handler
             return; // Exit sleep mode, don't schedule next sleep listening
           }
           
@@ -309,6 +309,7 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
           _assistantResponse = data['response'];
         });
         await _flutterTts.speak(_assistantResponse);
+        // Note: Next listening will start automatically via TTS completion handler
       } else {
         setState(() {
           _assistantResponse = 'Error communicating with server';
@@ -460,13 +461,19 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
                                     height: 8,
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
-                                      color: _isAssistantActive ? (_isListening ? Colors.redAccent : Colors.greenAccent) : Colors.grey,
+                                      color: _isAssistantActive 
+                                          ? (_isListening 
+                                              ? Colors.redAccent 
+                                              : (_isSpeaking ? Colors.orangeAccent : Colors.greenAccent))
+                                          : Colors.grey,
                                       boxShadow: [
                                         BoxShadow(
                                           color: _isAssistantActive
                                               ? (_isListening
                                                   ? Colors.redAccent.withOpacity(0.6)
-                                                  : Colors.greenAccent.withOpacity(0.6))
+                                                  : (_isSpeaking 
+                                                      ? Colors.orangeAccent.withOpacity(0.6)
+                                                      : Colors.greenAccent.withOpacity(0.6)))
                                               : Colors.grey.withOpacity(0.6),
                                           blurRadius: 4,
                                           spreadRadius: 1,
@@ -477,7 +484,9 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
                                   const SizedBox(width: 8),
                                   Text(
                                     _isAssistantActive
-                                        ? (_isListening ? 'LISTENING...' : 'READY')
+                                        ? (_isListening 
+                                            ? 'LISTENING...' 
+                                            : (_isSpeaking ? 'SPEAKING...' : 'READY'))
                                         : 'SLEEP MODE',
                                     style: TextStyle(
                                       fontSize: 12,
