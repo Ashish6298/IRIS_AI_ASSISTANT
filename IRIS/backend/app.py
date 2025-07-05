@@ -1,5 +1,5 @@
-# # # # Added turn off feature and updated wake phrases for iris and how are u also
-
+# Added turn off feature and updated wake phrases for iris and how are u also
+#added gemini api 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
@@ -18,6 +18,10 @@ CORS(app)  # Enable CORS for Flutter frontend
 # WeatherAPI configuration
 WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')  # Loaded from .env file
 WEATHER_API_URL = 'http://api.weatherapi.com/v1/current.json'
+
+# Gemini API configuration
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')  # Loaded from .env file
+GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
 
 # Multiple geolocation APIs for redundancy
 GEOLOCATION_APIS = [
@@ -155,6 +159,40 @@ def is_valid_wake_phrase(message):
     ]
     return any(phrase in message for phrase in wake_phrases)
 
+def get_gemini_qa_response(message):
+    """Fetch response from Gemini API for open-ended questions."""
+    try:
+        headers = {
+            'Content-Type': 'application/json',
+            'X-goog-api-key': GEMINI_API_KEY,
+        }
+        data = {
+            'contents': [{
+                'parts': [{
+                    'text': message
+                }]
+            }]
+        }
+        
+        response = requests.post(GEMINI_API_URL, headers=headers, json=data, timeout=10)
+        
+        if response.status_code == 200:
+            result = response.json()
+            candidates = result.get('candidates', [])
+            if candidates and 'content' in candidates[0] and 'parts' in candidates[0]['content']:
+                answer = candidates[0]['content']['parts'][0].get('text', '')
+                if answer.strip():
+                    return jsonify({'response': answer.strip()})
+            print("No valid answer from Gemini API")
+        else:
+            print(f"Gemini API error: Status code {response.status_code}")
+        
+        return jsonify({'response': "I’m not sure about that. Try asking in a different way."})
+    
+    except Exception as e:
+        print(f"Gemini API error: {e}")
+        return jsonify({'response': "I’m not sure about that. Try asking in a different way."})
+
 @app.route('/voice', methods=['POST'])
 def voice():
     data = request.get_json()
@@ -271,11 +309,8 @@ def voice():
             'assistant_active': True
         })
     
-    # Fallback response for unrecognized commands
-    return jsonify({
-        'response': "Sorry, I didn't catch that. You can ask me about the time, weather, say hello, or tell me to turn off!",
-        'assistant_active': True
-    })
+    # Forward to Gemini for open-ended questions if no intent matched
+    return get_gemini_qa_response(message)
 
 @app.route('/set-location', methods=['POST'])
 def set_location():
@@ -367,6 +402,7 @@ def health_check():
 if __name__ == '__main__':
     print("Starting iris Voice Assistant Backend...")
     print(f"Weather API Key loaded: {'Yes' if WEATHER_API_KEY else 'No'}")
+    print(f"Gemini API Key loaded: {'Yes' if GEMINI_API_KEY else 'No'}")
     print(f"Available geolocation APIs: {len(GEOLOCATION_APIS)}")
     print("Wake phrases: 'Hey iris', 'Hello iris'")
     app.run(host='0.0.0.0', port=5000, debug=True)

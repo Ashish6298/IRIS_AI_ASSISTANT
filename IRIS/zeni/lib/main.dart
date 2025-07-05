@@ -1,4 +1,4 @@
-//fixed the overlapping of voice
+//added gemini apis
 // Added turn off feature and how are u
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
@@ -19,7 +19,7 @@ class VoiceAssistantApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'IRIS AI',
+      title: 'Zen AI',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         scaffoldBackgroundColor: Colors.transparent,
@@ -36,8 +36,7 @@ class VoiceAssistantHomePage extends StatefulWidget {
   _VoiceAssistantHomePageState createState() => _VoiceAssistantHomePageState();
 }
 
-class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
-    with TickerProviderStateMixin {
+class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with TickerProviderStateMixin {
   final SpeechToText _speech = SpeechToText();
   final FlutterTts _flutterTts = FlutterTts();
   bool _isListening = false;
@@ -46,10 +45,10 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
   String _assistantResponse = '';
   bool _isInitialized = false;
   bool _isSpeaking = false; // Track if TTS is currently speaking
-
+  
   Timer? _sleepModeTimer; // Timer for sleep mode polling
   Timer? _listeningTimer; // Timer to stop listening after specified duration
-
+  
   // Animation controllers
   late AnimationController _pulseController;
   late AnimationController _micController;
@@ -89,15 +88,13 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    _micAnimation = Tween<double>(
-      begin: 0.8,
-      end: 1.2,
-    ).animate(CurvedAnimation(parent: _micController, curve: Curves.easeInOut));
+    _micAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
+      CurvedAnimation(parent: _micController, curve: Curves.easeInOut),
+    );
 
-    _gridAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _gridController, curve: Curves.linear));
+    _gridAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _gridController, curve: Curves.linear),
+    );
   }
 
   @override
@@ -113,18 +110,17 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
   // Initialize speech-to-text
   Future<void> _initSpeech() async {
     bool available = await _speech.initialize(
-      onStatus:
-          (status) => setState(() => _isListening = status == 'listening'),
+      onStatus: (status) => setState(() => _isListening = status == 'listening'),
       onError: (e) {
         print('Speech recognition error: $e');
-
+        
         // Handle the specific error that occurs in sleep mode
         if (!_isAssistantActive && e.errorMsg == 'error_no_match') {
           // In sleep mode, silently schedule next listening without showing error
           _scheduleSleepModeListening();
           return;
         }
-
+        
         // For other errors or when active, show the error and restart
         setState(() {
           _isListening = false;
@@ -132,7 +128,7 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
             _assistantResponse = 'Speech recognition error: $e';
           }
         });
-
+        
         if (_isAssistantActive) {
           _startContinuousListening(); // Continuous listening when active
         } else {
@@ -153,19 +149,19 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
   Future<void> _initTts() async {
     await _flutterTts.setLanguage('en-US');
     await _flutterTts.setSpeechRate(0.5);
-
+    
     // Set up TTS callbacks
     _flutterTts.setStartHandler(() {
       setState(() {
         _isSpeaking = true;
       });
     });
-
+    
     _flutterTts.setCompletionHandler(() {
       setState(() {
         _isSpeaking = false;
       });
-
+      
       // Only restart listening after TTS completes
       if (_isAssistantActive) {
         _startContinuousListening(); // Continuous when active
@@ -177,13 +173,12 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
 
   // Continuous listening for active mode
   void _startContinuousListening() async {
-    if (!_isInitialized || _isSpeaking)
-      return; // Don't start if TTS is speaking
-
+    if (!_isInitialized || _isSpeaking) return; // Don't start if TTS is speaking
+    
     // Cancel sleep mode timer if it's running
     _sleepModeTimer?.cancel();
     _listeningTimer?.cancel();
-
+    
     setState(() {
       _isListening = true;
       _transcribedText = '';
@@ -202,33 +197,30 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
           _speech.stop();
           setState(() => _isListening = false);
           String text = _transcribedText.toLowerCase().trim();
-
+          
           // Handle turn off command (enter sleep mode)
           if (text.contains('turn off')) {
             setState(() {
               _isAssistantActive = false;
-              _assistantResponse =
-                  'Entering sleep mode. Say "Hey iris" or "Hello iris" to wake me up.';
+              _assistantResponse = 'Entering sleep mode. Say "Hey iris" or "Hello iris" to wake me up.';
             });
             await _flutterTts.speak(_assistantResponse);
             _scheduleSleepModeListening(); // Switch to interval listening
-          }
+          } 
           // Send all commands to backend when active
           else if (_isAssistantActive) {
             await _sendToBackend(_transcribedText);
           }
         }
       },
-      listenFor: const Duration(
-        seconds: 10,
-      ), // Continuous listening for 10 seconds
+      listenFor: const Duration(seconds: 10), // Continuous listening for 10 seconds
     );
   }
 
   // Polling-based listening for sleep mode only
   void _startSleepModeListening() async {
     if (!_isInitialized || _isAssistantActive) return;
-
+    
     setState(() {
       _isListening = true;
       _transcribedText = '';
@@ -246,27 +238,23 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
           _listeningTimer?.cancel();
           setState(() => _isListening = false);
           String text = _transcribedText.toLowerCase().trim();
-
+          
           // Handle wake-up from sleep mode - looking for "Hey iris" or "Hello iris"
-          if (!_isAssistantActive &&
-              (text.contains('hey iris') || text.contains('hello iris'))) {
+          if (!_isAssistantActive && (text.contains('hey iris') || text.contains('hello iris'))) {
             setState(() {
               _isAssistantActive = true;
-              _assistantResponse =
-                  'Hi again! I was just resting. How can I help?';
+              _assistantResponse = 'Hi again! I was just resting. How can I help?';
             });
             await _flutterTts.speak(_assistantResponse);
             // Note: _startContinuousListening will be called by TTS completion handler
             return; // Exit sleep mode, don't schedule next sleep listening
           }
-
+          
           // If wake phrase not detected, schedule next polling session
           _scheduleSleepModeListening();
         }
       },
-      listenFor: const Duration(
-        seconds: 4,
-      ), // Listen for 4 seconds in sleep mode
+      listenFor: const Duration(seconds: 4), // Listen for 4 seconds in sleep mode
     );
 
     // Auto-stop listening after 4 seconds and schedule next session
@@ -282,14 +270,14 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
   // Schedule the next sleep mode listening session after 5-10 seconds pause
   void _scheduleSleepModeListening() {
     if (_isAssistantActive) return; // Don't schedule if assistant became active
-
+    
     _sleepModeTimer?.cancel();
     _listeningTimer?.cancel();
-
+    
     // Random delay between 5-10 seconds (using 7 seconds as middle ground)
     final random = Random();
     final delaySeconds = 5 + random.nextInt(6); // 5 to 10 seconds
-
+    
     _sleepModeTimer = Timer(Duration(seconds: delaySeconds), () {
       if (mounted && !_isAssistantActive) {
         _startSleepModeListening();
@@ -310,9 +298,7 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
   Future<void> _sendToBackend(String text) async {
     try {
       final response = await http.post(
-        Uri.parse(
-          'http://192.168.1.102:5000/voice',
-        ), // Backend URL for Android emulator
+        Uri.parse('http://192.168.1.102:5000/voice'), // Backend URL for Android emulator
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'message': text}),
       );
@@ -342,11 +328,7 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
   Widget build(BuildContext context) {
     return Scaffold(
       body: AnimatedBuilder(
-        animation: Listenable.merge([
-          _pulseAnimation,
-          _micAnimation,
-          _gridAnimation,
-        ]),
+        animation: Listenable.merge([_pulseAnimation, _micAnimation, _gridAnimation]),
         builder: (context, child) {
           return Container(
             decoration: const BoxDecoration(
@@ -365,19 +347,16 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
                 // AI Neural Lines Background
                 CustomPaint(
                   painter: AIGridPainter(_gridAnimation.value),
-                  size: Size(
-                    MediaQuery.of(context).size.width,
-                    MediaQuery.of(context).size.height,
-                  ),
+                  size: Size(MediaQuery.of(context).size.width, MediaQuery.of(context).size.height),
                 ),
-
+                
                 // Main content
                 Column(
                   children: [
                     const SizedBox(height: 60),
                     // iris Title with enhanced effects
                     Text(
-                      'IRIS',
+                      'iris',
                       style: TextStyle(
                         fontSize: 48,
                         fontWeight: FontWeight.w300,
@@ -386,9 +365,7 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
                         letterSpacing: 8.0,
                         shadows: [
                           Shadow(
-                            color: Colors.cyanAccent.withOpacity(
-                              0.8 + _pulseAnimation.value * 0.2,
-                            ),
+                            color: Colors.cyanAccent.withOpacity(0.8 + _pulseAnimation.value * 0.2),
                             blurRadius: 15.0 + _pulseAnimation.value * 10,
                             offset: const Offset(0, 0),
                           ),
@@ -400,7 +377,7 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
                         ],
                       ),
                     ),
-
+                    
                     // Subtitle
                     Text(
                       'VOICE ASSISTANT',
@@ -412,7 +389,7 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
                         fontWeight: FontWeight.w300,
                       ),
                     ),
-
+                    
                     Expanded(
                       child: Center(
                         child: Column(
@@ -427,25 +404,15 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                    color: Colors.cyanAccent.withOpacity(
-                                      0.5 + _pulseAnimation.value * 0.3,
-                                    ),
+                                    color: Colors.cyanAccent.withOpacity(0.5 + _pulseAnimation.value * 0.3),
                                     width: 2,
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color:
-                                          _isListening
-                                              ? Colors.redAccent.withOpacity(
-                                                0.3 +
-                                                    _pulseAnimation.value * 0.2,
-                                              )
-                                              : Colors.cyanAccent.withOpacity(
-                                                0.3 +
-                                                    _pulseAnimation.value * 0.2,
-                                              ),
-                                      blurRadius:
-                                          20 + _pulseAnimation.value * 10,
+                                      color: _isListening
+                                          ? Colors.redAccent.withOpacity(0.3 + _pulseAnimation.value * 0.2)
+                                          : Colors.cyanAccent.withOpacity(0.3 + _pulseAnimation.value * 0.2),
+                                      blurRadius: 20 + _pulseAnimation.value * 10,
                                       spreadRadius: _pulseAnimation.value * 5,
                                     ),
                                   ],
@@ -453,20 +420,12 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
                                 child: Container(
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color:
-                                        _isListening
-                                            ? Colors.redAccent
-                                            : Colors.blueAccent,
+                                    color: _isListening ? Colors.redAccent : Colors.blueAccent,
                                     boxShadow: [
                                       BoxShadow(
-                                        color:
-                                            _isListening
-                                                ? Colors.redAccent.withOpacity(
-                                                  0.6,
-                                                )
-                                                : Colors.blueAccent.withOpacity(
-                                                  0.6,
-                                                ),
+                                        color: _isListening
+                                            ? Colors.redAccent.withOpacity(0.6)
+                                            : Colors.blueAccent.withOpacity(0.6),
                                         blurRadius: 15,
                                         spreadRadius: 2,
                                       ),
@@ -480,15 +439,12 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
                                 ),
                               ),
                             ),
-
+                            
                             const SizedBox(height: 40),
-
+                            
                             // Status indicator
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 8,
-                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                               decoration: BoxDecoration(
                                 color: Colors.white.withOpacity(0.05),
                                 borderRadius: BorderRadius.circular(20),
@@ -505,31 +461,20 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
                                     height: 8,
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
-                                      color:
-                                          _isAssistantActive
-                                              ? (_isListening
-                                                  ? Colors.redAccent
-                                                  : (_isSpeaking
-                                                      ? Colors.orangeAccent
-                                                      : Colors.greenAccent))
-                                              : Colors.grey,
+                                      color: _isAssistantActive 
+                                          ? (_isListening 
+                                              ? Colors.redAccent 
+                                              : (_isSpeaking ? Colors.orangeAccent : Colors.greenAccent))
+                                          : Colors.grey,
                                       boxShadow: [
                                         BoxShadow(
-                                          color:
-                                              _isAssistantActive
-                                                  ? (_isListening
-                                                      ? Colors.redAccent
-                                                          .withOpacity(0.6)
-                                                      : (_isSpeaking
-                                                          ? Colors.orangeAccent
-                                                              .withOpacity(0.6)
-                                                          : Colors.greenAccent
-                                                              .withOpacity(
-                                                                0.6,
-                                                              )))
-                                                  : Colors.grey.withOpacity(
-                                                    0.6,
-                                                  ),
+                                          color: _isAssistantActive
+                                              ? (_isListening
+                                                  ? Colors.redAccent.withOpacity(0.6)
+                                                  : (_isSpeaking 
+                                                      ? Colors.orangeAccent.withOpacity(0.6)
+                                                      : Colors.greenAccent.withOpacity(0.6)))
+                                              : Colors.grey.withOpacity(0.6),
                                           blurRadius: 4,
                                           spreadRadius: 1,
                                         ),
@@ -539,11 +484,9 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
                                   const SizedBox(width: 8),
                                   Text(
                                     _isAssistantActive
-                                        ? (_isListening
-                                            ? 'LISTENING...'
-                                            : (_isSpeaking
-                                                ? 'SPEAKING...'
-                                                : 'READY'))
+                                        ? (_isListening 
+                                            ? 'LISTENING...' 
+                                            : (_isSpeaking ? 'SPEAKING...' : 'READY'))
                                         : 'SLEEP MODE',
                                     style: TextStyle(
                                       fontSize: 12,
@@ -556,147 +499,143 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage>
                                 ],
                               ),
                             ),
-
+                            
                             const SizedBox(height: 30),
-
+                            
                             // Transcribed text with enhanced styling
                             Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 30,
+                              padding: const EdgeInsets.symmetric(horizontal: 30),
+                              child: Text(
+                                _transcribedText.isEmpty
+                                        ? 'Ask Anything.....!' 
+                                    : 'You said: $_transcribedText',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: Colors.white.withOpacity(0.9),
+                                  fontWeight: FontWeight.w400,
+                                  fontFamily: 'Orbitron',
+                                  letterSpacing: 1.0,
+                                  shadows: [
+                                    Shadow(
+                                      blurRadius: 10.0,
+                                      color: Colors.cyanAccent.withOpacity(0.6),
+                                      offset: const Offset(0, 0),
+                                    ),
+                                  ],
+                                ),
+                                textAlign: TextAlign.center,
                               ),
-                              child:
-                                  _transcribedText.isEmpty
-                                      ? const SizedBox.shrink() // Shows nothing when empty
-                                      : Text(
-                                        'You said: $_transcribedText',
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          color: Colors.white.withOpacity(0.9),
-                                          fontWeight: FontWeight.w400,
-                                          fontFamily: 'Orbitron',
-                                          letterSpacing: 1.0,
-                                          shadows: [
-                                            Shadow(
-                                              blurRadius: 10.0,
-                                              color: Colors.cyanAccent
-                                                  .withOpacity(0.6),
-                                              offset: const Offset(0, 0),
+                            ),
+                            
+                            const SizedBox(height: 30),
+                            
+                            // Enhanced assistant response
+                            if (_assistantResponse.isNotEmpty)
+                              Flexible(
+                                child: Container(
+                                  constraints: BoxConstraints(
+                                    maxHeight: MediaQuery.of(context).size.height * 0.4, // Max 40% of screen height
+                                  ),
+                                  padding: const EdgeInsets.all(20),
+                                  margin: const EdgeInsets.symmetric(horizontal: 30),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.03),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: Colors.cyanAccent.withOpacity(
+                                        0.4 + _pulseAnimation.value * 0.2,
+                                      ),
+                                      width: 2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.cyanAccent.withOpacity(
+                                          0.2 + _pulseAnimation.value * 0.1,
+                                        ),
+                                        blurRadius: 20,
+                                        spreadRadius: 5,
+                                      ),
+                                      BoxShadow(
+                                        color: Colors.blueAccent.withOpacity(0.1),
+                                        blurRadius: 30,
+                                        spreadRadius: 10,
+                                      ),
+                                    ],
+                                  ),
+                                  child: SingleChildScrollView(
+                                    child: Column(
+                                      children: [
+                                        // Response header
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Container(
+                                              width: 6,
+                                              height: 6,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                color: Colors.cyanAccent,
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.cyanAccent.withOpacity(0.6),
+                                                    blurRadius: 4,
+                                                    spreadRadius: 1,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Text(
+                                              'iris RESPONSE',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.cyanAccent.withOpacity(0.8),
+                                                fontFamily: 'Orbitron',
+                                                letterSpacing: 2.0,
+                                                fontWeight: FontWeight.w300,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Container(
+                                              width: 6,
+                                              height: 6,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                color: Colors.cyanAccent,
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.cyanAccent.withOpacity(0.6),
+                                                    blurRadius: 4,
+                                                    spreadRadius: 1,
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                           ],
                                         ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                            ),
-
-                            const SizedBox(height: 30),
-
-                            // Enhanced assistant response
-                            if (_assistantResponse.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                margin: const EdgeInsets.symmetric(
-                                  horizontal: 30,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.03),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: Colors.cyanAccent.withOpacity(
-                                      0.4 + _pulseAnimation.value * 0.2,
-                                    ),
-                                    width: 2,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.cyanAccent.withOpacity(
-                                        0.2 + _pulseAnimation.value * 0.1,
-                                      ),
-                                      blurRadius: 20,
-                                      spreadRadius: 5,
-                                    ),
-                                    BoxShadow(
-                                      color: Colors.blueAccent.withOpacity(0.1),
-                                      blurRadius: 30,
-                                      spreadRadius: 10,
-                                    ),
-                                  ],
-                                ),
-                                child: Column(
-                                  children: [
-                                    // Response header
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Container(
-                                          width: 6,
-                                          height: 6,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: Colors.cyanAccent,
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.cyanAccent
-                                                    .withOpacity(0.6),
-                                                blurRadius: 4,
-                                                spreadRadius: 1,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
+                                        const SizedBox(height: 15),
+                                        // Response text
                                         Text(
-                                          'iris RESPONSE',
+                                          _assistantResponse,
                                           style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.cyanAccent
-                                                .withOpacity(0.8),
+                                            fontSize: 18,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w400,
                                             fontFamily: 'Orbitron',
-                                            letterSpacing: 2.0,
-                                            fontWeight: FontWeight.w300,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Container(
-                                          width: 6,
-                                          height: 6,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: Colors.cyanAccent,
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.cyanAccent
-                                                    .withOpacity(0.6),
-                                                blurRadius: 4,
-                                                spreadRadius: 1,
+                                            letterSpacing: 1.0,
+                                            shadows: [
+                                              Shadow(
+                                                blurRadius: 10.0,
+                                                color: Colors.cyanAccent.withOpacity(0.6),
+                                                offset: const Offset(0, 0),
                                               ),
                                             ],
                                           ),
+                                          textAlign: TextAlign.center,
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 15),
-                                    // Response text
-                                    Text(
-                                      _assistantResponse,
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w400,
-                                        fontFamily: 'Orbitron',
-                                        letterSpacing: 1.0,
-                                        shadows: [
-                                          Shadow(
-                                            blurRadius: 10.0,
-                                            color: Colors.cyanAccent
-                                                .withOpacity(0.6),
-                                            offset: const Offset(0, 0),
-                                          ),
-                                        ],
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
                           ],
@@ -722,26 +661,26 @@ class AIGridPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint =
-        Paint()
-          ..strokeWidth = 1.0
-          ..style = PaintingStyle.stroke;
+    final paint = Paint()
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
 
-    final nodePaint = Paint()..style = PaintingStyle.fill;
+    final nodePaint = Paint()
+      ..style = PaintingStyle.fill;
 
     // Generate neural network nodes
     final nodes = <Offset>[];
     final random = Random(42); // Fixed seed for consistent positions
-
+    
     // Create nodes across the screen
     for (int i = 0; i < 25; i++) {
       final x = random.nextDouble() * size.width;
       final y = random.nextDouble() * size.height;
-
+      
       // Add some movement to nodes
       final moveX = sin(animationValue * 2 * pi + i * 0.5) * 20;
       final moveY = cos(animationValue * 2 * pi + i * 0.3) * 15;
-
+      
       nodes.add(Offset(x + moveX, y + moveY));
     }
 
@@ -749,12 +688,11 @@ class AIGridPainter extends CustomPainter {
     for (int i = 0; i < nodes.length; i++) {
       for (int j = i + 1; j < nodes.length; j++) {
         final distance = (nodes[i] - nodes[j]).distance;
-
-        if (distance < 150) {
-          // Only connect nearby nodes
+        
+        if (distance < 150) { // Only connect nearby nodes
           final opacity = (1 - distance / 150) * 0.3;
           final pulseEffect = sin(animationValue * 4 * pi + i + j) * 0.1;
-
+          
           paint.color = Colors.cyanAccent.withOpacity(opacity + pulseEffect);
           canvas.drawLine(nodes[i], nodes[j], paint);
         }
@@ -765,10 +703,10 @@ class AIGridPainter extends CustomPainter {
     for (int i = 0; i < nodes.length; i++) {
       final pulseSize = 2 + sin(animationValue * 3 * pi + i * 0.7) * 1;
       final opacity = 0.4 + sin(animationValue * 2 * pi + i * 0.4) * 0.3;
-
+      
       nodePaint.color = Colors.cyanAccent.withOpacity(opacity);
       canvas.drawCircle(nodes[i], pulseSize, nodePaint);
-
+      
       // Add glow effect for some nodes
       if (i % 3 == 0) {
         nodePaint.color = Colors.cyanAccent.withOpacity(opacity * 0.3);
@@ -780,24 +718,23 @@ class AIGridPainter extends CustomPainter {
     for (int i = 0; i < 8; i++) {
       final startNode = nodes[i % nodes.length];
       final endNode = nodes[(i + 3) % nodes.length];
-
+      
       final flowProgress = (animationValue + i * 0.2) % 1.0;
       final flowPoint = Offset.lerp(startNode, endNode, flowProgress)!;
-
+      
       // Draw flowing data point
-      final flowPaint =
-          Paint()
-            ..color = Colors.white.withOpacity(0.8)
-            ..style = PaintingStyle.fill;
-
+      final flowPaint = Paint()
+        ..color = Colors.white.withOpacity(0.8)
+        ..style = PaintingStyle.fill;
+      
       canvas.drawCircle(flowPoint, 1.5, flowPaint);
-
+      
       // Add trail effect
       for (int t = 1; t <= 3; t++) {
         final trailProgress = (flowProgress - t * 0.05).clamp(0.0, 1.0);
         final trailPoint = Offset.lerp(startNode, endNode, trailProgress)!;
         final trailOpacity = (0.4 - t * 0.1).clamp(0.0, 1.0);
-
+        
         flowPaint.color = Colors.cyanAccent.withOpacity(trailOpacity);
         canvas.drawCircle(trailPoint, 1.0, flowPaint);
       }
