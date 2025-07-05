@@ -1,3 +1,15 @@
+ //added turn off feature
+
+
+
+
+
+
+
+
+
+// Added turn off feature
+
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:http/http.dart' as http;
@@ -5,6 +17,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'splash_screen.dart'; // Import the separate splash screen
+import 'dart:async';
 
 void main() {
   runApp(const VoiceAssistantApp());
@@ -37,9 +50,13 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
   final SpeechToText _speech = SpeechToText();
   final FlutterTts _flutterTts = FlutterTts();
   bool _isListening = false;
+  bool _isAssistantActive = true; // Now acts as a sleep mode toggle
   String _transcribedText = '';
   String _assistantResponse = '';
   bool _isInitialized = false;
+  
+  Timer? _sleepModeTimer; // Timer for sleep mode polling
+  Timer? _listeningTimer; // Timer to stop listening after specified duration
   
   // Animation controllers
   late AnimationController _pulseController;
@@ -91,6 +108,8 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
 
   @override
   void dispose() {
+    _sleepModeTimer?.cancel();
+    _listeningTimer?.cancel();
     _pulseController.dispose();
     _micController.dispose();
     _gridController.dispose();
@@ -103,17 +122,34 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
       onStatus: (status) => setState(() => _isListening = status == 'listening'),
       onError: (e) {
         print('Speech recognition error: $e');
+        
+        // Handle the specific error that occurs in sleep mode
+        if (!_isAssistantActive && e.errorMsg == 'error_no_match') {
+          // In sleep mode, silently schedule next listening without showing error
+          _scheduleSleepModeListening();
+          return;
+        }
+        
+        // For other errors or when active, show the error and restart
         setState(() {
           _isListening = false;
-          _assistantResponse = 'Speech recognition error: $e';
+          if (_isAssistantActive) {
+            _assistantResponse = 'Speech recognition error: $e';
+          }
         });
-        _startListening(); // Restart listening after error
+        
+        if (_isAssistantActive) {
+          _startContinuousListening(); // Continuous listening when active
+        } else {
+          _scheduleSleepModeListening(); // Interval listening in sleep mode
+        }
       },
     );
+
     if (available) {
       setState(() {
         _isInitialized = true;
-        _startListening(); // Start listening on app launch
+        _startContinuousListening(); // Start with continuous listening
       });
     }
   }
@@ -123,46 +159,146 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
     await _flutterTts.setLanguage('en-US');
     await _flutterTts.setSpeechRate(0.5);
     _flutterTts.setCompletionHandler(() {
-      _startListening();
+      if (_isAssistantActive) {
+        _startContinuousListening(); // Continuous when active
+      } else {
+        _scheduleSleepModeListening(); // Interval when in sleep mode
+      }
     });
   }
 
-  // Start listening for voice input
-  void _startListening() async {
+  // Continuous listening for active mode
+  void _startContinuousListening() async {
     if (!_isInitialized) return;
-
+    
+    // Cancel sleep mode timer if it's running
+    _sleepModeTimer?.cancel();
+    _listeningTimer?.cancel();
+    
     setState(() {
       _isListening = true;
       _transcribedText = '';
-      _assistantResponse = '';
+      if (_isAssistantActive) {
+        _assistantResponse = ''; // Only clear response when active
+      }
     });
 
     _speech.listen(
       onResult: (result) async {
         setState(() {
-          _transcribedText = result.recognizedWords; // Always update transcribed text
+          _transcribedText = result.recognizedWords;
         });
 
         if (result.finalResult) {
           _speech.stop();
           setState(() => _isListening = false);
           String text = _transcribedText.toLowerCase().trim();
-          if (text.contains('hello') || text.contains('time') || text.contains('weather') || text.contains('thank you')) {
-            await _sendToBackend(_transcribedText); // Send full transcribed text to backend
-          } else {
-            _startListening(); // Restart listening if no valid command
+          
+          // Handle turn off command (enter sleep mode)
+          if (text.contains('turn off')) {
+            setState(() {
+              _isAssistantActive = false;
+              _assistantResponse = 'Entering sleep mode. Say "Hey iris" or "Hello iris" to wake me up.';
+            });
+            await _flutterTts.speak(_assistantResponse);
+            _scheduleSleepModeListening(); // Switch to interval listening
+          } 
+          // Normal command processing when active
+          else if (_isAssistantActive && (text.contains('hello') || text.contains('time') || text.contains('weather') || text.contains('thank you'))) {
+            await _sendToBackend(_transcribedText);
+          } 
+          // Restart continuous listening if active
+          else if (_isAssistantActive) {
+            _startContinuousListening();
           }
         }
       },
-      listenFor: const Duration(seconds: 10), // Listen for up to 10 seconds
+      listenFor: const Duration(seconds: 10), // Continuous listening for 10 seconds
     );
+  }
+
+  // Polling-based listening for sleep mode only
+  void _startSleepModeListening() async {
+    if (!_isInitialized || _isAssistantActive) return;
+    
+    setState(() {
+      _isListening = true;
+      _transcribedText = '';
+    });
+
+    // Listen for 3-5 seconds (using 4 seconds as middle ground)
+    _speech.listen(
+      onResult: (result) async {
+        setState(() {
+          _transcribedText = result.recognizedWords;
+        });
+
+        if (result.finalResult) {
+          _speech.stop();
+          _listeningTimer?.cancel();
+          setState(() => _isListening = false);
+          String text = _transcribedText.toLowerCase().trim();
+          
+          // Handle wake-up from sleep mode - looking for "Hey iris" or "Hello iris"
+          if (!_isAssistantActive && (text.contains('hey iris') || text.contains('hello iris'))) {
+            setState(() {
+              _isAssistantActive = true;
+              _assistantResponse = 'Hi again! I was just resting. How can I help?';
+            });
+            await _flutterTts.speak(_assistantResponse);
+            _startContinuousListening(); // Switch to continuous listening
+            return; // Exit sleep mode, don't schedule next sleep listening
+          }
+          
+          // If wake phrase not detected, schedule next polling session
+          _scheduleSleepModeListening();
+        }
+      },
+      listenFor: const Duration(seconds: 4), // Listen for 4 seconds in sleep mode
+    );
+
+    // Auto-stop listening after 4 seconds and schedule next session
+    _listeningTimer = Timer(const Duration(seconds: 4), () {
+      if (_speech.isListening) {
+        _speech.stop();
+        setState(() => _isListening = false);
+      }
+      _scheduleSleepModeListening();
+    });
+  }
+
+  // Schedule the next sleep mode listening session after 5-10 seconds pause
+  void _scheduleSleepModeListening() {
+    if (_isAssistantActive) return; // Don't schedule if assistant became active
+    
+    _sleepModeTimer?.cancel();
+    _listeningTimer?.cancel();
+    
+    // Random delay between 5-10 seconds (using 7 seconds as middle ground)
+    final random = Random();
+    final delaySeconds = 5 + random.nextInt(6); // 5 to 10 seconds
+    
+    _sleepModeTimer = Timer(Duration(seconds: delaySeconds), () {
+      if (mounted && !_isAssistantActive) {
+        _startSleepModeListening();
+      }
+    });
+  }
+
+  // Main listening method that chooses the appropriate mode
+  void _startListening() async {
+    if (_isAssistantActive) {
+      _startContinuousListening();
+    } else {
+      _startSleepModeListening();
+    }
   }
 
   // Send transcribed text to Flask backend
   Future<void> _sendToBackend(String text) async {
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.1.109:5000/voice'), // Backend URL for Android emulator
+        Uri.parse('http://192.168.1.102:5000/voice'), // Backend URL for Android emulator
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'message': text}),
       );
@@ -177,13 +313,13 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
         setState(() {
           _assistantResponse = 'Error communicating with server';
         });
-        _startListening(); // Restart listening after error
+        _startListening(); // Restart appropriate listening mode
       }
     } catch (e) {
       setState(() {
         _assistantResponse = 'Network error: $e';
       });
-      _startListening(); // Restart listening after error
+      _startListening(); // Restart appropriate listening mode
     }
   }
 
@@ -217,9 +353,9 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
                 Column(
                   children: [
                     const SizedBox(height: 60),
-                    // ZENI Title with enhanced effects
+                    // iris Title with enhanced effects
                     Text(
-                      'ZENI',
+                      'iris',
                       style: TextStyle(
                         fontSize: 48,
                         fontWeight: FontWeight.w300,
@@ -324,12 +460,14 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
                                     height: 8,
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
-                                      color: _isListening ? Colors.redAccent : Colors.greenAccent,
+                                      color: _isAssistantActive ? (_isListening ? Colors.redAccent : Colors.greenAccent) : Colors.grey,
                                       boxShadow: [
                                         BoxShadow(
-                                          color: _isListening
-                                              ? Colors.redAccent.withOpacity(0.6)
-                                              : Colors.greenAccent.withOpacity(0.6),
+                                          color: _isAssistantActive
+                                              ? (_isListening
+                                                  ? Colors.redAccent.withOpacity(0.6)
+                                                  : Colors.greenAccent.withOpacity(0.6))
+                                              : Colors.grey.withOpacity(0.6),
                                           blurRadius: 4,
                                           spreadRadius: 1,
                                         ),
@@ -338,7 +476,9 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    _isListening ? 'LISTENING...' : 'READY',
+                                    _isAssistantActive
+                                        ? (_isListening ? 'LISTENING...' : 'READY')
+                                        : 'SLEEP MODE',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.white.withOpacity(0.8),
@@ -358,7 +498,9 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
                               padding: const EdgeInsets.symmetric(horizontal: 30),
                               child: Text(
                                 _transcribedText.isEmpty
-                                    ? 'Say "Hello", "Time", "Weather", or "Thank you"'
+                                    ? _isAssistantActive
+                                        ? 'Say "Hello", "Time", "Weather", "Thank you", or "Turn off"'
+                                        : 'Say "Hey iris" or "Hello iris" to wake up'
                                     : 'You said: $_transcribedText',
                                 style: TextStyle(
                                   fontSize: 18,
@@ -428,7 +570,7 @@ class _VoiceAssistantHomePageState extends State<VoiceAssistantHomePage> with Ti
                                         ),
                                         const SizedBox(width: 10),
                                         Text(
-                                          'ZENI RESPONSE',
+                                          'iris RESPONSE',
                                           style: TextStyle(
                                             fontSize: 12,
                                             color: Colors.cyanAccent.withOpacity(0.8),
